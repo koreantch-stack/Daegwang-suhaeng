@@ -90,12 +90,12 @@ $('csv').onclick=()=>{if(!results.length)return;const cols=Object.keys(results[0
   canvas.height=Math.floor(viewport.height*dpr);
   canvas.style.width=Math.floor(viewport.width)+'px';
   canvas.style.height=Math.floor(viewport.height)+'px';
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.setTransform(1,0,0,1,0,0);
   message.style.display='none';canvas.style.display='block';
   pageLabel.textContent='페이지 '+pageNum+' / '+pdfDoc.numPages;
   zoomLabel.textContent=Math.round(actualScale*100)+'%';
   prev.disabled=pageNum<=1;next.disabled=pageNum>=pdfDoc.numPages;
-  renderTask=page.render({canvasContext:ctx,viewport});
+  renderTask=page.render({canvasContext:ctx,viewport,transform:dpr!==1?[dpr,0,0,dpr,0,0]:null});
   try{await renderTask.promise;}catch(e){if(e.name!=='RenderingCancelledException')throw e;}
  }
  async function showFile(file){
