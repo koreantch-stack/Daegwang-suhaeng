@@ -66,7 +66,8 @@ function findAssessmentColumns(lines,match,fullText){
   const headerLines=pageLines.filter(l=>l.y>firstRowY+2);
   const headerItems=headerLines.flatMap(l=>l.items);
   const headerText=headerLines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
-  let items=allItems.filter(item=>appears(item,headerText));
+  const pageText=pageLines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
+  let items=allItems.filter(item=>appears(item,headerText)||appears(item,pageText));
   if(!items.length)items=allItems.filter(item=>appears(item,fullText||''));
   if(!items.length)continue;
   items.sort((a,b)=>DATA.indexOf(a)-DATA.indexOf(b));
