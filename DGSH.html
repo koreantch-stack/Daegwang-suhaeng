@@ -34,14 +34,14 @@ async function ocrFallback(doc,pages,status){
 let pdfCandidates=[];
 const pdfjsReady=()=>{if(!window.pdfjsLib)throw new Error('PDF 읽기 모듈을 불러오지 못했습니다. 인터넷 연결 후 다시 열어 주세요.');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';};
 function lineGroups(items){let arr=items.map(it=>({t:(it.str||'').trim(),x:it.transform?.[4]||0,y:it.transform?.[5]||0,w:it.width||0})).filter(a=>a.t);arr.sort((a,b)=>Math.abs(b.y-a.y)>3?b.y-a.y:a.x-b.x);let lines=[];for(let a of arr){let l=lines.find(q=>Math.abs(q.y-a.y)<=3);if(!l){l={y:a.y,items:[]};lines.push(l)}l.items.push(a)}for(let l of lines)l.items.sort((a,b)=>a.x-b.x);return lines;}
-function normAssessmentText(x){return (x||'').replace(/[\\s·ㆍ\\-_:：()（）]/g,'').toLowerCase();}
+function normAssessmentText(x){return (x||'').replace(/[\s·ㆍ\-_:：()（）]/g,'').toLowerCase();}
 function parseRosterLine(line){
  const its=[...line.items].sort((a,b)=>a.x-b.x);
- const idItem=its.find(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t));
+ const idItem=its.find(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t));
  if(!idItem)return null;
  const nameItem=its.find(a=>/^[가-힣]{2,4}$/.test(a.t)&&!/(계|합계|평균|미응시|결시|점수|이름|성명|번호|학년|반)$/.test(a.t));
  if(!nameItem)return null;
- const nums=its.filter(a=>a.x>nameItem.x).map(a=>{const m=a.t.match(/^(-?\\d+(?:\\.\\d+)?)\\s*(?:점)?$/);return m?{score:Number(m[1]),x:a.x,w:a.w||0,text:a.t}:null;}).filter(a=>a&&a.score>=0&&a.score<=100);
+ const nums=its.filter(a=>a.x>nameItem.x).map(a=>{const m=a.t.match(/^(-?\d+(?:\.\d+)?)\s*(?:점)?$/);return m?{score:Number(m[1]),x:a.x,w:a.w||0,text:a.t}:null;}).filter(a=>a&&a.score>=0&&a.score<=100);
  if(!nums.length)return null;
  return {id:idItem.t,name:nameItem.t,numbers:nums,line:its.map(a=>a.t).join(' '),page:line.page||1};
 }
@@ -50,17 +50,17 @@ function findAssessmentColumns(lines,match,fullText){
  const pages=[...new Set(lines.map(l=>l.page||1))];
  const allItems=DATA.filter(x=>x.grade===match.grade&&x.subject===match.subject&&x.allowed&&x.allowed.length);
  const normalize=normAssessmentText;
- function appears(title,txt){
-  const t=normalize(txt), full=normalize(title.item);
+ function appears(item,txt){
+  const t=normalize(txt), full=normalize(item.item);
   if(t.includes(full))return true;
-  const words=title.item.split(/\\s+/).map(normalize).filter(w=>w.length>=2);
+  const words=item.item.split(/\s+/).map(normalize).filter(w=>w.length>=2);
   if(!words.length)return false;
   const hits=words.filter(w=>t.includes(w)).length;
   return hits>=Math.max(2,Math.ceil(words.length*0.7));
  }
  for(const pn of pages){
   const pageLines=lines.filter(l=>(l.page||1)===pn);
-  const roster=pageLines.filter(l=>l.items.some(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t)));
+  const roster=pageLines.filter(l=>l.items.some(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t)));
   if(!roster.length)continue;
   const firstRowY=Math.max(...roster.map(l=>l.y));
   const headerLines=pageLines.filter(l=>l.y>firstRowY+2);
@@ -83,8 +83,6 @@ function findAssessmentColumns(lines,match,fullText){
   let positions=clusters.map(c=>({cx:c.sum/c.count,count:c.count}));
   if(!positions.length)continue;
 
-  // The summary/total column is not an assessment. Identify it by its header,
-  // and otherwise treat the rightmost numeric column as the total.
   const sumHeader=headerItems.find(a=>normalize(a.t).includes('합계'));
   if(positions.length>items.length){
    if(sumHeader){
@@ -99,8 +97,7 @@ function findAssessmentColumns(lines,match,fullText){
   }
   if(positions.length<items.length)items=items.slice(0,positions.length);
   if(!items.length||positions.length!==items.length)continue;
-  const cols=positions.map((p,i)=>({...items[i],page:pn,cx:p.cx}));
-  out.set(pn,cols);
+  out.set(pn,positions.map((p,i)=>({...items[i],page:pn,cx:p.cx})));
  }
  return out;
 }
@@ -124,7 +121,7 @@ $('readPdf').onclick=async()=>{
    const content=await page.getTextContent();
    const lines=lineGroups(content.items);lines.forEach(l=>l.page=pn);linesAll.push(...lines);
   }
-  const fullText=linesAll.map(l=>l.items.map(a=>a.t).join(' ')).join('\\n');
+  const fullText=linesAll.map(l=>l.items.map(a=>a.t).join(' ')).join('\n');
   const match=autoChooseItem(fullText);
   if(!match){
    status.textContent='PDF에서 기준표에 등록된 수행평가 항목명을 찾지 못했습니다. 제목이 기준표의 항목명과 일치하는지 확인하세요.';
