@@ -1,9 +1,9 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>2026년 2학기용 수행평가 점검기</title><style>
 :root{font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif;color:#172033;background:#f4f6fa}*{box-sizing:border-box}body{margin:0;padding:18px}.wrap{max-width:1100px;margin:auto}.head{background:#203a67;color:white;padding:22px;border-radius:16px;margin-bottom:16px}.head-title{display:flex;align-items:center;gap:14px;margin-bottom:8px}.school-logo{width:96px;height:auto;max-height:78px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;flex-shrink:0}.head h1{font-size:24px;margin:0}.head-title h1{line-height:1.3}@media(max-width:600px){.school-logo{width:64px;max-height:56px}.head-title{gap:10px}.head h1{font-size:19px}}.head p{margin:0;opacity:.9}.panel{background:white;border:1px solid #dce2ec;border-radius:14px;padding:18px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}select,input{width:100%;padding:11px;border:1px solid #c8d0df;border-radius:8px;font:inherit;background:white}button{border:0;border-radius:9px;padding:11px 15px;background:#2456a6;color:white;font-weight:700;cursor:pointer;margin:5px 5px 5px 0}button.secondary{background:#e8edf6;color:#203a67}button.danger{background:#a32d3b}.muted{color:#596579;font-size:13px}.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef3fb;margin:3px;font-size:12px}.good{color:#137647;font-weight:700}.bad{color:#b42332;font-weight:700}table{border-collapse:collapse;width:100%;margin-top:12px}th,td{padding:9px;border-bottom:1px solid #e2e7ef;text-align:left;font-size:14px}th{background:#f2f5fa}td input{min-width:70px}.scroll{overflow-x:auto}.hidden{display:none}.notice{background:#fff8e7;border:1px solid #f1d999;border-radius:10px;padding:12px;font-size:13px}.status{font-weight:700}.foot{font-size:12px;color:#657086;text-align:center;padding:14px}@media(max-width:600px){body{padding:10px}.head h1{font-size:20px}.panel{padding:13px}}\n
-.pdf-dropzone{border:2px dashed #9aaed0;border-radius:12px;background:#f7faff;padding:24px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;display:flex;flex-direction:column;align-items:center;gap:8px}.pdf-dropzone:hover,.pdf-dropzone.dragover{border-color:#2456a6;background:#edf4ff}.pdf-dropzone .drop-icon{font-size:30px}.pdf-dropzone>span{font-size:13px;color:#596579}.pdf-dropzone input[type=file]{max-width:420px;background:transparent;border:0;padding:6px;cursor:pointer}.pdf-file-info{font-size:13px;color:#2456a6;overflow-wrap:anywhere}.pdf-inline-preview{margin-top:12px;border:1px solid #dce2ec;border-radius:10px;overflow:hidden}.pdf-preview-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;background:#f2f5fa}.pdf-preview-head button{margin:0}.pdf-inline-preview iframe{display:block;width:100%;height:520px;border:0;background:#eef1f5}@media(max-width:600px){.pdf-dropzone{padding:18px 10px}.pdf-inline-preview iframe{height:380px}.pdf-preview-head{align-items:flex-start;flex-wrap:wrap}}
+.pdf-dropzone{border:2px dashed #9aaed0;border-radius:12px;background:#f7faff;padding:24px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;display:flex;flex-direction:column;align-items:center;gap:8px}.pdf-dropzone:hover,.pdf-dropzone.dragover{border-color:#2456a6;background:#edf4ff}.pdf-dropzone .drop-icon{font-size:30px}.pdf-dropzone>span{font-size:13px;color:#596579}.pdf-dropzone input[type=file]{max-width:420px;background:transparent;border:0;padding:6px;cursor:pointer}.pdf-file-info{font-size:13px;color:#2456a6;overflow-wrap:anywhere}.pdf-inline-preview{margin-top:12px;border:1px solid #dce2ec;border-radius:10px;overflow:hidden;background:#eef1f5}.pdf-preview-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;background:#f2f5fa}.pdf-preview-head button{margin:0}.pdf-preview-tools{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:8px;background:#e7edf6;border-top:1px solid #dce2ec}.pdf-preview-tools button{margin:0;padding:7px 11px}.pdf-page-label{font-size:13px;font-weight:700;min-width:90px;text-align:center}.pdf-canvas-wrap{height:min(72vh,850px);min-height:260px;overflow:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center;background:#dfe4eb}.pdf-canvas-wrap canvas{display:block;max-width:100%;height:auto;background:white;box-shadow:0 2px 12px #17203326}.pdf-preview-message{padding:28px 12px;text-align:center;color:#596579;font-size:14px}@media(max-width:600px){.pdf-dropzone{padding:18px 10px}.pdf-preview-head{align-items:flex-start;flex-wrap:wrap}.pdf-canvas-wrap{height:65vh;padding:8px}}
 </style></head><body><div class="wrap">
 <div style="display:none"><table><tbody id="rows"></tbody></table><button id="add"></button><button id="check"></button><button id="clear"></button><div id="summaryOld"></div></div>
-<section class="panel" id="pdfPanel"><h2>2. PDF 일람표 자동 인식</h2><p class="muted">수행평가 일람표 PDF 하나만 올리세요. 문서 제목과 표 머리글을 자동 분석해 평가 항목을 찾고 학생별 점수를 기준표와 대조합니다. 스캔본은 OCR을 시도합니다.</p><div><label for="pdfFile">수행평가 일람표 PDF</label><div id="pdfDropZone" class="pdf-dropzone" tabindex="0" role="button" aria-label="PDF 파일을 끌어다 놓거나 눌러서 선택"><div class="drop-icon">📄</div><strong>PDF 파일을 여기에 끌어다 놓으세요</strong><span>또는 눌러서 파일 선택</span><input id="pdfFile" type="file" accept="application/pdf,.pdf"><div id="pdfFileInfo" class="pdf-file-info">아직 선택된 파일이 없습니다.</div></div><div id="pdfInlinePreview" class="pdf-inline-preview hidden"><div class="pdf-preview-head"><strong>PDF 미리보기</strong><button type="button" id="closePdfPreview" class="secondary">미리보기 닫기</button></div><iframe id="pdfPreviewFrame" title="업로드한 PDF 미리보기"></iframe></div></div><button id="readPdf">일람표 자동 인식 및 점수 검사</button><button id="importPdf" class="secondary" style="display:none" disabled>가져오기</button><div id="pdfStatus" class="notice" style="margin-top:10px">PDF를 선택하고 자동 인식 버튼을 누르세요. 평가 항목과 점수 검사를 자동으로 진행합니다.</div><div id="pdfPreview" class="scroll"></div></section>
+<section class="panel" id="pdfPanel"><h2>2. PDF 일람표 자동 인식</h2><p class="muted">수행평가 일람표 PDF 하나만 올리세요. 문서 제목과 표 머리글을 자동 분석해 평가 항목을 찾고 학생별 점수를 기준표와 대조합니다. 스캔본은 OCR을 시도합니다.</p><div><label for="pdfFile">수행평가 일람표 PDF</label><div id="pdfDropZone" class="pdf-dropzone" tabindex="0" role="button" aria-label="PDF 파일을 끌어다 놓거나 눌러서 선택"><div class="drop-icon">📄</div><strong>PDF 파일을 여기에 끌어다 놓으세요</strong><span>또는 눌러서 파일 선택</span><input id="pdfFile" type="file" accept="application/pdf,.pdf"><div id="pdfFileInfo" class="pdf-file-info">아직 선택된 파일이 없습니다.</div></div><div id="pdfInlinePreview" class="pdf-inline-preview hidden"><div class="pdf-preview-head"><strong>PDF 미리보기</strong><button type="button" id="closePdfPreview" class="secondary">미리보기 닫기</button></div><div class="pdf-preview-tools"><button type="button" id="pdfPrevPage" class="secondary" disabled>이전 페이지</button><span id="pdfPageLabel" class="pdf-page-label">페이지 0 / 0</span><button type="button" id="pdfNextPage" class="secondary" disabled>다음 페이지</button><button type="button" id="pdfZoomOut" class="secondary" disabled>−</button><span id="pdfZoomLabel">100%</span><button type="button" id="pdfZoomIn" class="secondary" disabled>＋</button><button type="button" id="pdfFitWidth" class="secondary" disabled>너비 맞춤</button></div><div id="pdfCanvasWrap" class="pdf-canvas-wrap"><div id="pdfPreviewMessage" class="pdf-preview-message">PDF를 선택하면 페이지 미리보기가 표시됩니다.</div><canvas id="pdfPreviewCanvas" aria-label="PDF 페이지 미리보기" style="display:none"></canvas></div></div></div><button id="readPdf">일람표 자동 인식 및 점수 검사</button><button id="importPdf" class="secondary" style="display:none" disabled>가져오기</button><div id="pdfStatus" class="notice" style="margin-top:10px">PDF를 선택하고 자동 인식 버튼을 누르세요. 평가 항목과 점수 검사를 자동으로 진행합니다.</div><div id="pdfPreview" class="scroll"></div></section>
 <section class="panel"><h2>점검 결과</h2><div id="summary">아직 PDF를 분석하지 않았습니다.</div><div id="resultsTable" class="scroll"></div><button id="csv" class="secondary" disabled>점검 결과 CSV 저장</button></section>
 <section class="panel"><h2>점검 시 유의사항</h2><div class="notice">점검기는 허용 총점 급간과 입력 점수를 대조합니다. 결시 사유를 자동으로 판단하지 않으므로, 기본점수·장기 미인정 결시 점수는 교사가 점수 유형을 지정해야 합니다. 원본 평가계획과 학교의 최종 확정 기준을 함께 확인하세요.</div></section><div class="foot">2026년 2학기용 · 항목 데이터 내장형 HTML</div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script>
@@ -58,21 +58,65 @@ $('csv').onclick=()=>{if(!results.length)return;const cols=Object.keys(results[0
  const zone=document.getElementById('pdfDropZone');
  const info=document.getElementById('pdfFileInfo');
  const preview=document.getElementById('pdfInlinePreview');
- const frame=document.getElementById('pdfPreviewFrame');
  const close=document.getElementById('closePdfPreview');
- if(!input||!zone||!info||!preview||!frame)return;
- let previewUrl=null;
- function showFile(file){
+ const canvas=document.getElementById('pdfPreviewCanvas');
+ const canvasWrap=document.getElementById('pdfCanvasWrap');
+ const message=document.getElementById('pdfPreviewMessage');
+ const pageLabel=document.getElementById('pdfPageLabel');
+ const zoomLabel=document.getElementById('pdfZoomLabel');
+ const prev=document.getElementById('pdfPrevPage');
+ const next=document.getElementById('pdfNextPage');
+ const zoomOut=document.getElementById('pdfZoomOut');
+ const zoomIn=document.getElementById('pdfZoomIn');
+ const fit=document.getElementById('pdfFitWidth');
+ if(!input||!zone||!info||!preview||!canvas)return;
+ let pdfDoc=null,pageNum=1,scale=1,renderTask=null,loadingToken=0,fitWidth=true;
+ const ctx=canvas.getContext('2d');
+ function setControls(ready){
+  [prev,next,zoomOut,zoomIn,fit].forEach(el=>{if(el)el.disabled=!ready;});
+ }
+ async function renderPage(){
+  if(!pdfDoc)return;
+  if(renderTask){try{renderTask.cancel();}catch(e){}renderTask=null;}
+  const page=await pdfDoc.getPage(pageNum);
+  const base=page.getViewport({scale:1});
+  const available=Math.max(240,canvasWrap.clientWidth-32);
+  const actualScale=fitWidth?Math.min(2.5,available/base.width):scale;
+  const viewport=page.getViewport({scale:actualScale});
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  canvas.width=Math.floor(viewport.width*dpr);
+  canvas.height=Math.floor(viewport.height*dpr);
+  canvas.style.width=Math.floor(viewport.width)+'px';
+  canvas.style.height=Math.floor(viewport.height)+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  message.style.display='none';canvas.style.display='block';
+  pageLabel.textContent='페이지 '+pageNum+' / '+pdfDoc.numPages;
+  zoomLabel.textContent=Math.round(actualScale*100)+'%';
+  prev.disabled=pageNum<=1;next.disabled=pageNum>=pdfDoc.numPages;
+  renderTask=page.render({canvasContext:ctx,viewport});
+  try{await renderTask.promise;}catch(e){if(e.name!=='RenderingCancelledException')throw e;}
+ }
+ async function showFile(file){
   if(!file)return;
+  loadingToken++;const token=loadingToken;
   if(!(file.type==='application/pdf'||/\.pdf$/i.test(file.name))){
    info.textContent='PDF 파일만 업로드할 수 있습니다.';
-   input.value='';preview.classList.add('hidden');frame.removeAttribute('src');return;
+   input.value='';preview.classList.add('hidden');pdfDoc=null;setControls(false);return;
   }
   info.textContent='선택된 파일: '+file.name+' ('+(file.size/1024/1024).toFixed(2)+' MB)';
-  if(previewUrl)URL.revokeObjectURL(previewUrl);
-  previewUrl=URL.createObjectURL(file);
-  frame.src=previewUrl+'#toolbar=1&navpanes=0';
-  preview.classList.remove('hidden');
+  preview.classList.remove('hidden');message.style.display='block';message.textContent='PDF를 불러오는 중입니다…';canvas.style.display='none';setControls(false);
+  try{
+   if(!window.pdfjsLib)throw new Error('PDF 미리보기 모듈을 불러오지 못했습니다. 인터넷 연결 후 새로고침해 주세요.');
+   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+   const bytes=await file.arrayBuffer();
+   const doc=await pdfjsLib.getDocument({data:bytes}).promise;
+   if(token!==loadingToken){doc.destroy();return;}
+   pdfDoc=doc;pageNum=1;scale=1;fitWidth=true;setControls(true);await renderPage();
+  }catch(err){
+   if(token!==loadingToken)return;
+   pdfDoc=null;setControls(false);canvas.style.display='none';message.style.display='block';
+   message.textContent='미리보기를 표시하지 못했습니다. PDF 파일이 손상되지 않았는지 확인해 주세요. ('+(err&&err.message?err.message:'알 수 없는 오류')+')';
+  }
  }
  input.addEventListener('change',()=>showFile(input.files&&input.files[0]));
  zone.addEventListener('click',e=>{if(e.target!==input)input.click();});
@@ -88,5 +132,14 @@ $('csv').onclick=()=>{if(!results.length)return;const cols=Object.keys(results[0
   showFile(file);
  });
  if(close)close.addEventListener('click',()=>preview.classList.add('hidden'));
-})();
+ if(prev)prev.addEventListener('click',()=>{if(pdfDoc&&pageNum>1){pageNum--;renderPage().catch(showRenderError);}});
+ if(next)next.addEventListener('click',()=>{if(pdfDoc&&pageNum<pdfDoc.numPages){pageNum++;renderPage().catch(showRenderError);}});
+ if(zoomOut)zoomOut.addEventListener('click',()=>{fitWidth=false;scale=Math.max(.5,scale-.15);renderPage().catch(showRenderError);});
+ if(zoomIn)zoomIn.addEventListener('click',()=>{fitWidth=false;scale=Math.min(2.5,scale+.15);renderPage().catch(showRenderError);});
+ if(fit)fit.addEventListener('click',()=>{fitWidth=true;renderPage().catch(showRenderError);});
+ function showRenderError(err){message.style.display='block';message.textContent='페이지 표시 중 오류가 발생했습니다: '+(err&&err.message?err.message:'알 수 없는 오류');}
+ let resizeTimer;
+ window.addEventListener('resize',()=>{if(pdfDoc&&fitWidth){clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>renderPage().catch(showRenderError),120);}});
+ if(close)close.addEventListener('click',()=>preview.classList.add('hidden'));
+})(););
 </script></body></html>
