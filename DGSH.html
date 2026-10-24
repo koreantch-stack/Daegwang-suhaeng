@@ -34,24 +34,117 @@ async function ocrFallback(doc,pages,status){
 let pdfCandidates=[];
 const pdfjsReady=()=>{if(!window.pdfjsLib)throw new Error('PDF 읽기 모듈을 불러오지 못했습니다. 인터넷 연결 후 다시 열어 주세요.');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';};
 function lineGroups(items){let arr=items.map(it=>({t:(it.str||'').trim(),x:it.transform?.[4]||0,y:it.transform?.[5]||0,w:it.width||0})).filter(a=>a.t);arr.sort((a,b)=>Math.abs(b.y-a.y)>3?b.y-a.y:a.x-b.x);let lines=[];for(let a of arr){let l=lines.find(q=>Math.abs(q.y-a.y)<=3);if(!l){l={y:a.y,items:[]};lines.push(l)}l.items.push(a)}for(let l of lines)l.items.sort((a,b)=>a.x-b.x);return lines;}
-function parseRosterLine(line){let its=line.items, joined=its.map(a=>a.t).join(' ');if(/학년|반\s*번호|성명|이름|합계|점수|수행평가|평가항목|번호/.test(joined)&&!/[가-힣]{2,4}/.test(joined.replace(/학년|수행평가|평가항목/g,'')))return null;
- // name candidate: short Korean name cell, excluding common headings and labels
- let nameItem=its.find(a=>/^[가-힣]{2,4}$/.test(a.t)&&!/(계|합계|평균|미응시|결시|점수|이름|성명|번호|학년|반)$/.test(a.t));
+function normAssessmentText(x){return (x||'').replace(/[\\s·ㆍ\\-_:：()（）]/g,'').toLowerCase();}
+function parseRosterLine(line){
+ const its=[...line.items].sort((a,b)=>a.x-b.x);
+ const idItem=its.find(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t));
+ if(!idItem)return null;
+ const nameItem=its.find(a=>/^[가-힣]{2,4}$/.test(a.t)&&!/(계|합계|평균|미응시|결시|점수|이름|성명|번호|학년|반)$/.test(a.t));
  if(!nameItem)return null;
- let nums=[];for(let a of its){let m=a.t.match(/^(-?\d+(?:\.\d+)?)\s*(?:점)?$/);if(m){let n=Number(m[1]);if(n>=0&&n<=100)nums.push({score:n,x:a.x,text:a.t})}}
+ const nums=its.filter(a=>a.x>nameItem.x).map(a=>{const m=a.t.match(/^(-?\\d+(?:\\.\\d+)?)\\s*(?:점)?$/);return m?{score:Number(m[1]),x:a.x,w:a.w||0,text:a.t}:null;}).filter(a=>a&&a.score>=0&&a.score<=100);
  if(!nums.length)return null;
- // score candidate: use selected assessment title if printed near a column header; otherwise rightmost plausible score in the row
- let chosen=nums[nums.length-1];return {name:nameItem.t,score:chosen.score,allScores:nums.map(n=>n.score),line:joined,page:line.page||1};}
-$('readPdf').onclick=async()=>{const f=$('pdfFile').files[0];if(!f){alert('먼저 수행평가 일람표 PDF를 선택하세요.');return}const status=$('pdfStatus');status.textContent='일람표를 분석하고 있습니다…';$('pdfPreview').innerHTML='';$('importPdf').disabled=true;pdfCandidates=[];try{pdfjsReady();const bytes=await f.arrayBuffer();const doc=await pdfjsLib.getDocument({data:bytes}).promise;let pages=Array.from({length:doc.numPages},(_,i)=>i+1);let linesAll=[];for(let pn of pages){let page=await doc.getPage(pn);let content=await page.getTextContent();let lines=lineGroups(content.items);lines.forEach(l=>l.page=pn);linesAll.push(...lines)}
- const fullText=linesAll.map(l=>l.items.map(a=>a.t).join(' ')).join('\n');let match=autoChooseItem(fullText);if(!match){status.textContent='평가 항목을 기준표와 자동으로 연결하지 못했습니다. PDF에 평가 항목명이 표시되어 있는지 확인해 주세요.';$('autoMatch').textContent='평가 항목 자동 매칭 실패. 인식된 제목: '+fullText.slice(0,500);return;}setSelected(match);$('autoMatch').innerHTML='<b>자동 인식:</b> '+esc(match.grade)+' · '+esc(match.subject)+' · '+esc(match.item)+'<br>허용 점수: '+esc(match.allowed.join(', '))+'<br>기본점수: '+esc(match.basic)+'점 / 장기 미인정 결시: '+esc(match.long)+'점';
- let found=linesAll.map(parseRosterLine).filter(Boolean);let seen=new Set();pdfCandidates=found.filter(r=>{let k=r.page+'|'+r.name+'|'+r.score;if(seen.has(k))return false;seen.add(k);return true});
- if(!pdfCandidates.length){status.textContent='텍스트에서 학생 행을 찾지 못해 스캔 PDF OCR을 실행합니다…';await ocrFallback(doc,pages,status);}
- if(!pdfCandidates.length){status.textContent='학생 이름과 점수를 자동으로 찾지 못했습니다. 스캔 품질 또는 표 구조를 확인해야 합니다.';return;}
- results=pdfCandidates.map(r=>{let type=(Number(r.score)===Number(match.long))?'long':(Number(r.score)===Number(match.basic)?'basic':'normal');let ok=type==='long'?Number(r.score)===Number(match.long):type==='basic'?Number(r.score)===Number(match.basic):match.allowed.includes(Number(r.score));return {학년:match.grade,과목:match.subject,수행평가항목:match.item,학생이름:r.name,점수:r.score,점수유형:type==='long'?'장기 미인정 결시 후보':type==='basic'?'기본점수 후보':'일반 점수',판정:ok?'허용 기준 일치':'허용 급간 외',페이지:r.page,인식행:r.line}});
- const bad=results.filter(r=>r.판정==='허용 급간 외');$('summary').innerHTML='<p><b>'+esc(match.grade+' '+match.subject+' / '+match.item)+'</b></p><p>학생 '+results.length+'명 인식 · <span class="good">기준 일치 '+(results.length-bad.length)+'명</span> · <span class="bad">확인 필요 '+bad.length+'명</span></p><p class="muted">기본점수·장기 미인정 결시 여부는 PDF만으로 확정할 수 없어 점수 일치 후보로 표시합니다. 학생별 사유를 확인하세요.</p>';
- $('resultsTable').innerHTML='<table><thead><tr><th>학생</th><th>점수</th><th>판정</th><th>쪽</th><th>인식한 원문</th></tr></thead><tbody>'+results.map(r=>'<tr><td>'+esc(r.학생이름)+'</td><td>'+esc(r.점수)+'</td><td class="'+(r.판정==='허용 기준 일치'?'good':'bad')+'">'+esc(r.판정)+' ('+esc(r.점수유형)+')</td><td>'+esc(r.페이지)+'</td><td>'+esc(r.인식행)+'</td></tr>').join('')+'</tbody></table>';
- $('csv').disabled=false;status.textContent='자동 인식 완료. 결과를 확인하고 CSV로 저장할 수 있습니다.';
- }catch(e){status.textContent='PDF 읽기 실패: '+e.message+' (인터넷 연결이 필요할 수 있습니다.)'}};
+ return {id:idItem.t,name:nameItem.t,numbers:nums,line:its.map(a=>a.t).join(' '),page:line.page||1};
+}
+function findAssessmentColumns(lines,match){
+ const out=new Map();
+ const pages=[...new Set(lines.map(l=>l.page||1))];
+ const items=DATA.filter(x=>x.grade===match.grade&&x.subject===match.subject&&x.allowed&&x.allowed.length);
+ for(const pn of pages){
+  const pageLines=lines.filter(l=>(l.page||1)===pn);
+  const roster=pageLines.filter(l=>l.items.some(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t)));
+  if(!roster.length)continue;
+  const firstRowY=Math.max(...roster.map(l=>l.y));
+  const headerLines=pageLines.filter(l=>l.y>firstRowY+2);
+  const headerItems=headerLines.flatMap(l=>l.items);
+  const cols=[];
+  for(const item of items){
+   const full=normAssessmentText(item.item);
+   const last=normAssessmentText(item.item.split(/\\s+/).slice(-1)[0]);
+   let anchor=headerItems.find(a=>normAssessmentText(a.t)===full)
+      ||headerItems.find(a=>normAssessmentText(a.t).includes(full))
+      ||headerItems.find(a=>normAssessmentText(a.t)===last);
+   if(anchor)cols.push({...item,page:pn,cx:(anchor.x||0)+(anchor.w||0)/2});
+  }
+  cols.sort((a,b)=>a.cx-b.cx);
+  if(cols.length)out.set(pn,cols);
+ }
+ return out;
+}
+function scoreColumnTolerance(cols){
+ const gaps=[];for(let i=1;i<cols.length;i++)gaps.push(cols[i].cx-cols[i-1].cx);
+ return gaps.length?Math.max(18,Math.min(45,Math.min(...gaps)*0.35)):28;
+}
+$('readPdf').onclick=async()=>{
+ const f=$('pdfFile').files[0];
+ if(!f){alert('먼저 수행평가 일람표 PDF를 선택하세요.');return}
+ const status=$('pdfStatus');status.textContent='일람표를 분석하고 있습니다…';
+ $('pdfPreview').innerHTML='';$('resultsTable').innerHTML='';$('importPdf').disabled=true;$('csv').disabled=true;pdfCandidates=[];results=[];
+ try{
+  pdfjsReady();
+  const bytes=await f.arrayBuffer();
+  const doc=await pdfjsLib.getDocument({data:bytes}).promise;
+  const pages=Array.from({length:doc.numPages},(_,i)=>i+1);
+  const linesAll=[];
+  for(const pn of pages){
+   const page=await doc.getPage(pn);
+   const content=await page.getTextContent();
+   const lines=lineGroups(content.items);lines.forEach(l=>l.page=pn);linesAll.push(...lines);
+  }
+  const fullText=linesAll.map(l=>l.items.map(a=>a.t).join(' ')).join('\\n');
+  const match=autoChooseItem(fullText);
+  if(!match){
+   status.textContent='PDF에서 기준표에 등록된 수행평가 항목명을 찾지 못했습니다. 제목이 기준표의 항목명과 일치하는지 확인하세요.';
+   $('autoMatch').textContent='평가 항목 자동 매칭 실패. 인식된 텍스트: '+fullText.slice(0,500);return;
+  }
+  setSelected(match);
+  const columnsByPage=findAssessmentColumns(linesAll,match);
+  const allCols=[...columnsByPage.values()].flat();
+  const uniqueItems=[...new Map(allCols.map(c=>[c.grade+'|'+c.subject+'|'+c.item,c])).values()];
+  if(!allCols.length){
+   status.textContent='평가 항목명은 일부 찾았지만, 표 머리글과 점수 열을 연결하지 못했습니다. 점수 판정은 실행하지 않았습니다.';
+   $('autoMatch').textContent='선택된 항목: '+match.item;return;
+  }
+  $('autoMatch').innerHTML='<b>자동 인식:</b> '+esc(match.grade)+' · '+esc(match.subject)+'<br><b>검사 항목:</b> '+uniqueItems.map(x=>esc(x.item)+' ('+x.max+'점)').join(' · ');
+  const found=linesAll.map(parseRosterLine).filter(Boolean);
+  if(!found.length){
+   status.textContent='학생 행에서 반/번호와 이름을 읽지 못했습니다. PDF가 스캔본이거나 표의 텍스트 구조가 다를 수 있습니다. 잘못된 점수를 추정해서 판정하지 않았습니다.';return;
+  }
+  pdfCandidates=found;
+  for(const r of found){
+   const cols=columnsByPage.get(r.page)||[];
+   if(!cols.length)continue;
+   const tolerance=scoreColumnTolerance(cols);
+   for(const num of r.numbers){
+    let nearest=null,dist=Infinity;
+    for(const col of cols){
+     const d=Math.abs((num.x+(num.w||0)/2)-col.cx);
+     if(d<dist){dist=d;nearest=col;}
+    }
+    if(!nearest||dist>tolerance)continue;
+    const n=Number(num.score);
+    const type=(n===Number(nearest.long))?'long':(n===Number(nearest.basic)?'basic':'normal');
+    const ok=(type==='long')||nearest.allowed.includes(n);
+    results.push({
+     학년:nearest.grade,과목:nearest.subject,학생번호:r.id,학생이름:r.name,
+     수행평가항목:nearest.item,점수:n,허용점수:nearest.allowed.join(', '),
+     점수유형:type==='long'?'장기 미인정 결시 후보':type==='basic'?'기본점수 후보':'일반 점수',
+     판정:ok?'허용 기준 일치':'허용 급간 외',페이지:r.page,인식행:r.line
+    });
+   }
+  }
+  if(!results.length){
+   status.textContent='학생 이름은 읽었지만 개별 수행평가 점수 열을 항목명과 연결하지 못했습니다. 점수 판정은 실행하지 않았습니다.';return;
+  }
+  const bad=results.filter(r=>r.판정==='허용 급간 외');
+  const studentCount=new Set(results.map(r=>r.학생이름)).size;
+  const badStudents=new Set(bad.map(r=>r.학생이름)).size;
+  const testedItems=[...new Set(results.map(r=>r.수행평가항목))];
+  $('summary').innerHTML='<p><b>'+esc(match.grade+' '+match.subject)+'</b></p><p>학생 '+studentCount+'명 인식 · 검사 항목 '+testedItems.length+'개 · <span class="good">기준 일치 '+(results.length-bad.length)+'건</span> · <span class="bad">허용 급간 외 '+bad.length+'건 ('+badStudents+'명)</span></p><p class="muted">각 행은 학생별 개별 수행평가 점수입니다. 허용 점수 열에서 해당 항목의 기준을 확인하세요. 기본점수·장기 미인정 결시 사유는 교사가 별도로 확인해야 합니다.</p>';
+  $('resultsTable').innerHTML='<table><thead><tr><th>학생</th><th>수행평가 항목</th><th>점수</th><th>허용 점수</th><th>판정</th><th>쪽</th><th>인식한 원문</th></tr></thead><tbody>'+results.map(r=>'<tr><td>'+esc(r.학생이름)+'</td><td>'+esc(r.수행평가항목)+'</td><td>'+esc(r.점수)+'</td><td>'+esc(r.허용점수)+'</td><td class="'+(r.판정==='허용 기준 일치'?'good':'bad')+'">'+esc(r.판정)+' ('+esc(r.점수유형)+')</td><td>'+esc(r.페이지)+'</td><td>'+esc(r.인식행)+'</td></tr>').join('')+'</tbody></table>';
+  $('csv').disabled=false;
+  status.textContent='자동 인식 완료: 학생 '+studentCount+'명, 항목 '+testedItems.length+'개, 급간 외 점수 '+bad.length+'건. 각 항목명을 확인하세요.';
+ }catch(e){status.textContent='PDF 읽기 실패: '+e.message+' (인터넷 연결이 필요할 수 있습니다.)'}
+};
 $('csv').onclick=()=>{if(!results.length)return;const cols=Object.keys(results[0]);const csv=[cols.join(','),...results.map(r=>cols.map(k=>'"'+String(r[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='2026년_2학기용_수행평가_점검결과.csv';a.click();URL.revokeObjectURL(a.href)};
 
 (function(){
