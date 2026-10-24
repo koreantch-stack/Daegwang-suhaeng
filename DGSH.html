@@ -141,5 +141,5 @@ $('csv').onclick=()=>{if(!results.length)return;const cols=Object.keys(results[0
  let resizeTimer;
  window.addEventListener('resize',()=>{if(pdfDoc&&fitWidth){clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>renderPage().catch(showRenderError),120);}});
  if(close)close.addEventListener('click',()=>preview.classList.add('hidden'));
-})(););
+})();
 </script></body></html>
