@@ -45,10 +45,19 @@ function parseRosterLine(line){
  if(!nums.length)return null;
  return {id:idItem.t,name:nameItem.t,numbers:nums,line:its.map(a=>a.t).join(' '),page:line.page||1};
 }
-function findAssessmentColumns(lines,match){
+function findAssessmentColumns(lines,match,fullText){
  const out=new Map();
  const pages=[...new Set(lines.map(l=>l.page||1))];
- const items=DATA.filter(x=>x.grade===match.grade&&x.subject===match.subject&&x.allowed&&x.allowed.length);
+ const allItems=DATA.filter(x=>x.grade===match.grade&&x.subject===match.subject&&x.allowed&&x.allowed.length);
+ const normalize=normAssessmentText;
+ function appears(title,txt){
+  const t=normalize(txt), full=normalize(title.item);
+  if(t.includes(full))return true;
+  const words=title.item.split(/\\s+/).map(normalize).filter(w=>w.length>=2);
+  if(!words.length)return false;
+  const hits=words.filter(w=>t.includes(w)).length;
+  return hits>=Math.max(2,Math.ceil(words.length*0.7));
+ }
  for(const pn of pages){
   const pageLines=lines.filter(l=>(l.page||1)===pn);
   const roster=pageLines.filter(l=>l.items.some(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t)));
@@ -56,17 +65,41 @@ function findAssessmentColumns(lines,match){
   const firstRowY=Math.max(...roster.map(l=>l.y));
   const headerLines=pageLines.filter(l=>l.y>firstRowY+2);
   const headerItems=headerLines.flatMap(l=>l.items);
-  const cols=[];
-  for(const item of items){
-   const full=normAssessmentText(item.item);
-   const last=normAssessmentText(item.item.split(/\\s+/).slice(-1)[0]);
-   let anchor=headerItems.find(a=>normAssessmentText(a.t)===full)
-      ||headerItems.find(a=>normAssessmentText(a.t).includes(full))
-      ||headerItems.find(a=>normAssessmentText(a.t)===last);
-   if(anchor)cols.push({...item,page:pn,cx:(anchor.x||0)+(anchor.w||0)/2});
+  const headerText=headerLines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
+  let items=allItems.filter(item=>appears(item,headerText));
+  if(!items.length)items=allItems.filter(item=>appears(item,fullText||''));
+  if(!items.length)continue;
+  items.sort((a,b)=>DATA.indexOf(a)-DATA.indexOf(b));
+
+  const parsedRows=roster.map(parseRosterLine).filter(Boolean);
+  const centres=parsedRows.flatMap(r=>r.numbers.map(n=>(n.x||0)+(n.w||0)/2)).sort((a,b)=>a-b);
+  const clusters=[];
+  for(const x of centres){
+   let c=clusters.find(q=>Math.abs(q.sum/q.count-x)<=14);
+   if(!c){c={sum:x,count:1};clusters.push(c);}else{c.sum+=x;c.count++;}
   }
-  cols.sort((a,b)=>a.cx-b.cx);
-  if(cols.length)out.set(pn,cols);
+  clusters.sort((a,b)=>(a.sum/a.count)-(b.sum/b.count));
+  let positions=clusters.map(c=>({cx:c.sum/c.count,count:c.count}));
+  if(!positions.length)continue;
+
+  // The summary/total column is not an assessment. Identify it by its header,
+  // and otherwise treat the rightmost numeric column as the total.
+  const sumHeader=headerItems.find(a=>normalize(a.t).includes('합계'));
+  if(positions.length>items.length){
+   if(sumHeader){
+    const sumX=(sumHeader.x||0)+(sumHeader.w||0)/2;
+    let nearest=0;
+    for(let i=1;i<positions.length;i++){
+     if(Math.abs(positions[i].cx-sumX)<Math.abs(positions[nearest].cx-sumX))nearest=i;
+    }
+    positions.splice(nearest,1);
+   }
+   while(positions.length>items.length)positions.pop();
+  }
+  if(positions.length<items.length)items=items.slice(0,positions.length);
+  if(!items.length||positions.length!==items.length)continue;
+  const cols=positions.map((p,i)=>({...items[i],page:pn,cx:p.cx}));
+  out.set(pn,cols);
  }
  return out;
 }
@@ -97,7 +130,7 @@ $('readPdf').onclick=async()=>{
    $('autoMatch').textContent='평가 항목 자동 매칭 실패. 인식된 텍스트: '+fullText.slice(0,500);return;
   }
   setSelected(match);
-  const columnsByPage=findAssessmentColumns(linesAll,match);
+  const columnsByPage=findAssessmentColumns(linesAll,match,fullText);
   const allCols=[...columnsByPage.values()].flat();
   const uniqueItems=[...new Map(allCols.map(c=>[c.grade+'|'+c.subject+'|'+c.item,c])).values()];
   if(!allCols.length){
