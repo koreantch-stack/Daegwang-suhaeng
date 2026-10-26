@@ -87,7 +87,7 @@ function isStudentScoreRow(line){
  if(nums.length<2)return false;
  return its.some(a=>a.x<nums[0].x);
 }
-let pdfCandidates=[];let pdfCandidates=[];
+let pdfCandidates=[];
 const pdfjsReady=()=>{if(!window.pdfjsLib)throw new Error('PDF 읽기 모듈을 불러오지 못했습니다. 인터넷 연결 후 다시 열어 주세요.');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';};
 function lineGroups(items){
  let arr=items.map(it=>({t:(it.str||it.t||'').trim(),x:it.transform?.[4]??it.x??0,y:it.transform?.[5]??it.y??0,w:it.width??it.w??0,h:Math.abs(it.height??it.h??it.transform?.[3]??0)})).filter(a=>a.t);
