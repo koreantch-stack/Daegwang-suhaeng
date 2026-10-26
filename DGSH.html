@@ -64,15 +64,15 @@ async function ocrPageLines(page,pn,status){
 }
 function isStudentScoreRow(line){
  const its=[...line.items].sort((a,b)=>a.x-b.x);
- if(its.some(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t)))return true;
+ if(its.some(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t)))return true;
  const raw=its.map(a=>a.t).join(' ');
- if(/응시생수|총점|평균|학년|합계|비고|성명|반\\s*[\\/]\\s*번호|교과목|강의실|일람표|만점|학년도/.test(raw))return false;
- const nums=its.filter(a=>/^\\d{1,3}[.,]\\d{1,2}$/.test(a.t.trim()));
+ if(/응시생수|총점|평균|학년|합계|비고|성명|반\s*[\/]\s*번호|교과목|강의실|일람표|만점|학년도/.test(raw))return false;
+ const nums=its.filter(a=>/^\d{1,3}[.,]\d{1,2}$/.test(a.t.trim()));
  if(nums.length<2)return false;
  const before=its.filter(a=>a.x<nums[0].x);
  return before.length>=1;
 }
-\nlet pdfCandidates=[];let pdfCandidates=[];
+let pdfCandidates=[];
 const pdfjsReady=()=>{if(!window.pdfjsLib)throw new Error('PDF 읽기 모듈을 불러오지 못했습니다. 인터넷 연결 후 다시 열어 주세요.');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';};
 function lineGroups(items){
  let arr=items.map(it=>({t:(it.str||it.t||'').trim(),x:it.transform?.[4]??it.x??0,y:it.transform?.[5]??it.y??0,w:it.width??it.w??0,h:Math.abs(it.height??it.h??it.transform?.[3]??0)})).filter(a=>a.t);
@@ -92,7 +92,7 @@ function detectPageGrade(text){
  const h=t.match(/([1-3])학년수행평가항목/);
  if(h)return h[1]+'학년';
  const groups=[
-  ...[...t.matchAll(/([1-3])학년\\d+반/g)],
+  ...[...t.matchAll(/([1-3])학년\d+반/g)],
   ...[...t.matchAll(/([1-3])학년[0-9ㅣlI|]*강의실/g)]
  ].map(m=>m[1]+'학년');
  const unique=[...new Set(groups)];
@@ -183,17 +183,17 @@ function findPhraseCenter(lines,phrase){
 }
 function parseRosterLine(line,rowIndex=1){
  const its=[...line.items].sort((a,b)=>a.x-b.x);
- const scorePattern=/^-?\\d{1,3}[.,]\\d{1,2}$/;
+ const scorePattern=/^-?\d{1,3}[.,]\d{1,2}$/;
  const rawNums=its.filter(a=>scorePattern.test(a.t.trim()));
  if(rawNums.length<2)return null;
  const firstScoreX=Math.min(...rawNums.map(a=>a.x));
  const before=its.filter(a=>a.x<firstScoreX);
- const idItem=its.find(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t))
+ const idItem=its.find(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t))
   ||before.find(a=>a.x===Math.min(...before.map(q=>q.x)));
  const nameItem=before.find(a=>/^[가-힣]{2,4}$/.test(a.t)&&!/(계|합계|평균|미응시|결시|점수|이름|성명|번호|학년|반|수행|교과목)$/.test(a.t));
  if(!idItem&&!line.items.some(a=>a.ocr))return null;
  const nums=its.filter(a=>a.x>=(nameItem?nameItem.x+Math.min(1,(nameItem.w||1)*.5):firstScoreX))
-  .map(a=>{const raw=a.t.trim().replace(',','.');const m=raw.match(/^(-?\\d{1,3}(?:\\.\\d{1,2})?)\\s*(?:점)?$/);return m?{score:Number(m[1]),x:a.x,w:a.w||0,text:a.t}:null;})
+  .map(a=>{const raw=a.t.trim().replace(',','.');const m=raw.match(/^(-?\d{1,3}(?:\.\d{1,2})?)\s*(?:점)?$/);return m?{score:Number(m[1]),x:a.x,w:a.w||0,text:a.t}:null;})
   .filter(a=>a&&a.score>=0&&a.score<=100);
  if(nums.length<2)return null;
  const name=nameItem?nameItem.t:'이름 인식 확인 ('+(line.page||1)+'페이지 '+rowIndex+'행)';
@@ -254,7 +254,7 @@ $('readPdf').onclick=async()=>{
    lines.forEach(l=>l.page=pn);
    let pageText=lines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
    let grade=detectPageGrade(pageText);
-   const hasExactRoster=lines.some(l=>l.items.some(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t)));
+   const hasExactRoster=lines.some(l=>l.items.some(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t)));
    const hasSubject=!!detectPageSubject(lines);
    const report={page:pn,grade:grade,subject:null,items:[],studentCount:0,error:''};
    pageReports.push(report);
