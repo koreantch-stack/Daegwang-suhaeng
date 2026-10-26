@@ -40,7 +40,10 @@ function detectPageGrade(text){
  const t=normAssessmentText(text);
  const h=t.match(/([1-3])학년수행평가항목/);
  if(h)return h[1]+'학년';
- const groups=[...t.matchAll(/([1-3])학년\d+반/g)].map(m=>m[1]+'학년');
+ const groups=[
+  ...[...t.matchAll(/([1-3])학년\d+반/g)],
+  ...[...t.matchAll(/([1-3])학년\d*강의실/g)]
+ ].map(m=>m[1]+'학년');
  const unique=[...new Set(groups)];
  return unique.length===1?unique[0]:null;
 }
@@ -75,7 +78,32 @@ function findPhraseCenter(lines,phrase){
    return found.reduce((sum,x)=>sum+x,0)/found.length;
   }
  }
- return null;
+ // 한 평가 항목이 표 셀 안에서 두 줄 이상으로 줄바꿈된 경우,
+ // 각 텍스트 조각의 가로 위치를 이용해 같은 제목의 조각인지 추정한다.
+ const covered=new Set(),pieces=[];
+ for(const line of lines){
+  for(const a of line.items){
+   const token=normAssessmentText(a.t);
+   if(token.length<3)continue;
+   let from=0,idx;
+   while((idx=target.indexOf(token,from))>=0){
+    for(let j=idx;j<idx+token.length;j++)covered.add(j);
+    const x=Number(a.x)||0,w=Number(a.w)||Math.max(1,token.length*4);
+    pieces.push({x:x+w/2,len:token.length,start:idx,end:idx+token.length});
+    from=idx+1;
+   }
+  }
+ }
+ if(covered.size/target.length<0.55||!pieces.length)return null;
+ // 중복되어 인식한 글자 조각의 가중치는 한 번만 반영한다.
+ const charCenters=new Array(target.length).fill(null);
+ for(const p of pieces){
+  for(let j=p.start;j<p.end;j++){
+   if(charCenters[j]===null)charCenters[j]=p.x;
+  }
+ }
+ const found=charCenters.filter(x=>x!==null);
+ return found.length?found.reduce((sum,x)=>sum+x,0)/found.length:null;
 }
 function parseRosterLine(line){
  const its=[...line.items].sort((a,b)=>a.x-b.x);
@@ -154,7 +182,7 @@ $('readPdf').onclick=async()=>{
    const subject=detectPageSubject(headerLines);
    report.subject=subject;
 
-   let defs=DATA.filter(x=>x.grade===grade&&x.allowed&&x.allowed.length&&compactHeader.includes(normAssessmentText(x.item)));
+   let defs=DATA.filter(x=>x.grade===grade&&x.allowed&&x.allowed.length&&(compactHeader.includes(normAssessmentText(x.item))||findPhraseCenter(headerLines,x.item)!==null));
    if(subject)defs=defs.filter(x=>x.subject===subject);
    if(!subject&&defs.length){
     const subjects=[...new Set(defs.map(x=>x.subject))];
