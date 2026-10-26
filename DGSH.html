@@ -26,23 +26,74 @@ fill($('grade'),uniq(DATA.map(x=>x.grade)),'전체 학년');fill($('subject'),un
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // PDF 자동 인식: PDF.js 텍스트 좌표를 이용해 표 행을 재구성하고 이름·점수 후보를 찾습니다.
 
-async function ocrFallback(doc,pages,status){
- if(!window.Tesseract){await new Promise((resolve,reject)=>{let sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';sc.onload=resolve;sc.onerror=()=>reject(new Error('OCR 모듈을 불러오지 못했습니다.'));document.head.appendChild(sc)}).catch(e=>{status.textContent=e.message;});}
- if(!window.Tesseract)return;
- let worker;try{worker=await Tesseract.createWorker('kor+eng',1,{logger:m=>{if(m.status)status.textContent='OCR 처리 중: '+m.status+(m.progress!=null?' '+Math.round(m.progress*100)+'%':'')}});let idx=0;for(let pn of pages){idx++;let page=await doc.getPage(pn);let vp=page.getViewport({scale:1.8});let canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;let out=await worker.recognize(canvas);let lines=(out.data.text||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);for(let ln of lines){let m=ln.match(/([가-힣]{2,4})\s+.*?(\d{1,3})(?:\s*점)?\s*$/);if(m){let score=Number(m[2]);if(score<=100)pdfCandidates.push({name:m[1],score,allScores:[...ln.matchAll(/\b\d{1,3}\b/g)].map(x=>Number(x[0])).filter(x=>x<=100),line:ln,page:pn})}}canvas.width=1;canvas.height=1;}await worker.terminate();let seen=new Set();pdfCandidates=pdfCandidates.filter(r=>{let k=r.page+'|'+r.name+'|'+r.score;if(seen.has(k))return false;seen.add(k);return true});}catch(e){if(worker)try{await worker.terminate()}catch{}status.textContent='OCR 실행 중 오류: '+e.message;}
+let sharedOcrWorker=null;
+async function ensureOcrWorker(status){
+ if(!window.Tesseract){
+  await new Promise((resolve,reject)=>{
+   const sc=document.createElement('script');
+   sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+   sc.onload=resolve;sc.onerror=()=>reject(new Error('OCR 모듈을 불러오지 못했습니다. 인터넷 연결을 확인하세요.'));
+   document.head.appendChild(sc);
+  });
+ }
+ if(!sharedOcrWorker){
+  sharedOcrWorker=await Tesseract.createWorker('kor+eng',1,{
+   logger:m=>{if(m.status)status.textContent='스캔 PDF OCR 처리 중: '+m.status+(m.progress!=null?' '+Math.round(m.progress*100)+'%':'');}
+  });
+  try{await sharedOcrWorker.setParameters({preserve_interword_spaces:'1'});}catch(e){}
+ }
+ return sharedOcrWorker;
 }
-
-let pdfCandidates=[];
+async function ocrPageLines(page,pn,status){
+ const worker=await ensureOcrWorker(status);
+ const viewport=page.getViewport({scale:2.6});
+ const canvas=document.createElement('canvas');
+ canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+ await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+ status.textContent='스캔 PDF OCR 처리 중: '+pn+'페이지';
+ const out=await worker.recognize(canvas);
+ const words=(out.data.words||[]).filter(w=>String(w.text||'').trim()&&(!Number.isFinite(w.confidence)||w.confidence>=8));
+ const items=words.map(w=>{
+  const b=w.bbox||{};
+  return {t:String(w.text||'').trim(),x:Number(b.x0)||0,y:canvas.height-(((Number(b.y0)||0)+(Number(b.y1)||0))/2),w:Math.max(1,(Number(b.x1)||0)-(Number(b.x0)||0)),h:Math.max(1,(Number(b.y1)||0)-(Number(b.y0)||0)),ocr:true,confidence:w.confidence};
+ });
+ canvas.width=1;canvas.height=1;
+ if(!items.length)throw new Error('OCR에서 글자를 찾지 못했습니다.');
+ const lines=lineGroups(items);lines.forEach(l=>l.page=pn);
+ return lines;
+}
+function isStudentScoreRow(line){
+ const its=[...line.items].sort((a,b)=>a.x-b.x);
+ if(its.some(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t)))return true;
+ const raw=its.map(a=>a.t).join(' ');
+ if(/응시생수|총점|평균|학년|합계|비고|성명|반\\s*[\\/]\\s*번호|교과목|강의실|일람표|만점|학년도/.test(raw))return false;
+ const nums=its.filter(a=>/^\\d{1,3}[.,]\\d{1,2}$/.test(a.t.trim()));
+ if(nums.length<2)return false;
+ const before=its.filter(a=>a.x<nums[0].x);
+ return before.length>=1;
+}
+\nlet pdfCandidates=[];let pdfCandidates=[];
 const pdfjsReady=()=>{if(!window.pdfjsLib)throw new Error('PDF 읽기 모듈을 불러오지 못했습니다. 인터넷 연결 후 다시 열어 주세요.');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';};
-function lineGroups(items){let arr=items.map(it=>({t:(it.str||'').trim(),x:it.transform?.[4]||0,y:it.transform?.[5]||0,w:it.width||0})).filter(a=>a.t);arr.sort((a,b)=>Math.abs(b.y-a.y)>3?b.y-a.y:a.x-b.x);let lines=[];for(let a of arr){let l=lines.find(q=>Math.abs(q.y-a.y)<=3);if(!l){l={y:a.y,items:[]};lines.push(l)}l.items.push(a)}for(let l of lines)l.items.sort((a,b)=>a.x-b.x);return lines;}
+function lineGroups(items){
+ let arr=items.map(it=>({t:(it.str||it.t||'').trim(),x:it.transform?.[4]??it.x??0,y:it.transform?.[5]??it.y??0,w:it.width??it.w??0,h:Math.abs(it.height??it.h??it.transform?.[3]??0)})).filter(a=>a.t);
+ arr.sort((a,b)=>Math.abs(b.y-a.y)>4?b.y-a.y:a.x-b.x);
+ let lines=[];
+ for(let a of arr){
+  let l=lines.find(q=>Math.abs(q.y-a.y)<=Math.max(4,Math.min(10,Math.max(q.h||0,a.h||0)*.25)));
+  if(!l){l={y:a.y,items:[]};lines.push(l)}
+  l.items.push(a);
+ }
+ for(let l of lines)l.items.sort((a,b)=>a.x-b.x);
+ return lines;
+}
 function normAssessmentText(x){return (x||'').replace(/[\s·ㆍ\-_:：()（）]/g,'').toLowerCase();}
 function detectPageGrade(text){
  const t=normAssessmentText(text);
  const h=t.match(/([1-3])학년수행평가항목/);
  if(h)return h[1]+'학년';
  const groups=[
-  ...[...t.matchAll(/([1-3])학년\d+반/g)],
-  ...[...t.matchAll(/([1-3])학년\d*강의실/g)]
+  ...[...t.matchAll(/([1-3])학년\\d+반/g)],
+  ...[...t.matchAll(/([1-3])학년[0-9ㅣlI|]*강의실/g)]
  ].map(m=>m[1]+'학년');
  const unique=[...new Set(groups)];
  return unique.length===1?unique[0]:null;
@@ -59,6 +110,33 @@ function detectPageSubject(lines){
  }
  return null;
 }
+function editDistance(a,b){
+ const prev=Array.from({length:b.length+1},(_,i)=>i);
+ for(let i=1;i<=a.length;i++){
+  let diag=prev[0];prev[0]=i;
+  for(let j=1;j<=b.length;j++){
+   const old=prev[j];
+   prev[j]=Math.min(prev[j]+1,prev[j-1]+1,diag+(a[i-1]===b[j-1]?0:1));
+   diag=old;
+  }
+ }
+ return prev[b.length];
+}
+function bestTargetFragment(target,token){
+ if(token.length<2)return null;
+ let best=null;
+ const minLen=Math.max(2,token.length-1),maxLen=Math.min(target.length,token.length+1);
+ for(let len=minLen;len<=maxLen;len++){
+  for(let start=0;start+len<=target.length;start++){
+   const sub=target.slice(start,start+len),dist=editDistance(token,sub);
+   const allowed=token.length<=3?0:Math.max(1,Math.floor(Math.min(token.length,len)*.22));
+   if(dist<=allowed&&(!best||dist<best.dist||(dist===best.dist&&Math.abs(len-token.length)<Math.abs((best.end-best.start)-token.length)))){
+    best={start,end:start+len,dist};
+   }
+  }
+ }
+ return best;
+}
 function findPhraseCenter(lines,phrase){
  const target=normAssessmentText(phrase);
  if(!target)return null;
@@ -68,52 +146,59 @@ function findPhraseCenter(lines,phrase){
   for(const a of its){
    const token=normAssessmentText(a.t);
    if(!token)continue;
-   const x=Number(a.x)||0;
-   const w=Number(a.w)||Math.max(1,token.length*4);
-   for(let i=0;i<token.length;i++){joined+=token[i];charX.push(x+w*(i+0.5)/token.length);}
+   const x=Number(a.x)||0,w=Number(a.w)||Math.max(1,token.length*4);
+   for(let i=0;i<token.length;i++){joined+=token[i];charX.push(x+w*(i+.5)/token.length);}
   }
   const at=joined.indexOf(target);
-  if(at>=0){
-   const found=charX.slice(at,at+target.length);
-   return found.reduce((sum,x)=>sum+x,0)/found.length;
-  }
+  if(at>=0){const xs=charX.slice(at,at+target.length);return xs.reduce((sum,x)=>sum+x,0)/xs.length;}
  }
- // 한 평가 항목이 표 셀 안에서 두 줄 이상으로 줄바꿈된 경우,
- // 각 텍스트 조각의 가로 위치를 이용해 같은 제목의 조각인지 추정한다.
- const covered=new Set(),pieces=[];
- for(const line of lines){
-  for(const a of line.items){
-   const token=normAssessmentText(a.t);
-   if(token.length<3)continue;
-   let from=0,idx;
-   while((idx=target.indexOf(token,from))>=0){
-    for(let j=idx;j<idx+token.length;j++)covered.add(j);
-    const x=Number(a.x)||0,w=Number(a.w)||Math.max(1,token.length*4);
-    pieces.push({x:x+w/2,len:token.length,start:idx,end:idx+token.length});
-    from=idx+1;
-   }
-  }
+ const matches=[];
+ for(const line of lines)for(const a of line.items){
+  const token=normAssessmentText(a.t);
+  if(token.length<2)continue;
+  const m=bestTargetFragment(target,token);
+  if(!m)continue;
+  matches.push({x:(Number(a.x)||0)+(Number(a.w)||Math.max(1,token.length*4))/2,start:m.start,end:m.end,dist:m.dist,len:token.length});
  }
- if(covered.size/target.length<0.55||!pieces.length)return null;
- // 중복되어 인식한 글자 조각의 가중치는 한 번만 반영한다.
- const charCenters=new Array(target.length).fill(null);
- for(const p of pieces){
-  for(let j=p.start;j<p.end;j++){
-   if(charCenters[j]===null)charCenters[j]=p.x;
-  }
+ if(!matches.length)return null;
+ const clusters=[];
+ for(const m of matches.sort((a,b)=>a.x-b.x)){
+  let c=clusters.find(q=>Math.abs(q.sum/q.count-m.x)<=65);
+  if(!c)clusters.push(c={sum:0,count:0,matches:[]});
+  c.sum+=m.x;c.count++;c.matches.push(m);
  }
- const found=charCenters.filter(x=>x!==null);
- return found.length?found.reduce((sum,x)=>sum+x,0)/found.length:null;
+ let best=null;
+ for(const c of clusters){
+  const covered=new Set();
+  for(const m of c.matches)for(let j=m.start;j<m.end;j++)covered.add(j);
+  const ratio=covered.size/target.length;
+  const quality=ratio-(c.matches.reduce((sum,m)=>sum+m.dist,0)/Math.max(1,c.matches.length))*.025;
+  if(!best||quality>best.quality)best={c,covered,ratio,quality};
+ }
+ if(!best||best.ratio<.4)return null;
+ const byChar=new Map();
+ for(const m of best.c.matches)for(let i=m.start;i<m.end;i++)if(!byChar.has(i))byChar.set(i,m.x);
+ const xs=[...byChar.values()];
+ return xs.length?xs.reduce((sum,x)=>sum+x,0)/xs.length:best.c.sum/best.c.count;
 }
-function parseRosterLine(line){
+function parseRosterLine(line,rowIndex=1){
  const its=[...line.items].sort((a,b)=>a.x-b.x);
- const idItem=its.find(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t));
- if(!idItem)return null;
- const nameItem=its.find(a=>/^[가-힣]{2,4}$/.test(a.t)&&!/(계|합계|평균|미응시|결시|점수|이름|성명|번호|학년|반)$/.test(a.t));
- if(!nameItem)return null;
- const nums=its.filter(a=>a.x>nameItem.x).map(a=>{const m=a.t.match(/^(-?\d+(?:\.\d+)?)\s*(?:점)?$/);return m?{score:Number(m[1]),x:a.x,w:a.w||0,text:a.t}:null;}).filter(a=>a&&a.score>=0&&a.score<=100);
- if(!nums.length)return null;
- return {id:idItem.t,name:nameItem.t,numbers:nums,line:its.map(a=>a.t).join(' '),page:line.page||1};
+ const scorePattern=/^-?\\d{1,3}[.,]\\d{1,2}$/;
+ const rawNums=its.filter(a=>scorePattern.test(a.t.trim()));
+ if(rawNums.length<2)return null;
+ const firstScoreX=Math.min(...rawNums.map(a=>a.x));
+ const before=its.filter(a=>a.x<firstScoreX);
+ const idItem=its.find(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t))
+  ||before.find(a=>a.x===Math.min(...before.map(q=>q.x)));
+ const nameItem=before.find(a=>/^[가-힣]{2,4}$/.test(a.t)&&!/(계|합계|평균|미응시|결시|점수|이름|성명|번호|학년|반|수행|교과목)$/.test(a.t));
+ if(!idItem&&!line.items.some(a=>a.ocr))return null;
+ const nums=its.filter(a=>a.x>=(nameItem?nameItem.x+Math.min(1,(nameItem.w||1)*.5):firstScoreX))
+  .map(a=>{const raw=a.t.trim().replace(',','.');const m=raw.match(/^(-?\\d{1,3}(?:\\.\\d{1,2})?)\\s*(?:점)?$/);return m?{score:Number(m[1]),x:a.x,w:a.w||0,text:a.t}:null;})
+  .filter(a=>a&&a.score>=0&&a.score<=100);
+ if(nums.length<2)return null;
+ const name=nameItem?nameItem.t:'이름 인식 확인 ('+(line.page||1)+'페이지 '+rowIndex+'행)';
+ const id=idItem?idItem.t:'행 '+rowIndex;
+ return {id,name,numbers:nums,line:its.map(a=>a.t).join(' '),page:line.page||1,nameUncertain:!nameItem};
 }
 function clusterScorePositions(rows){
  const centres=rows.flatMap(r=>r.numbers.map(n=>(n.x||0)+(n.w||0)/2)).sort((a,b)=>a-b);
@@ -165,17 +250,29 @@ $('readPdf').onclick=async()=>{
   for(let pn=1;pn<=doc.numPages;pn++){
    const page=await doc.getPage(pn);
    const content=await page.getTextContent();
-   const lines=lineGroups(content.items);
+   let lines=lineGroups(content.items);
    lines.forEach(l=>l.page=pn);
-   const pageText=lines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
-   const grade=detectPageGrade(pageText);
+   let pageText=lines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
+   let grade=detectPageGrade(pageText);
+   const hasExactRoster=lines.some(l=>l.items.some(a=>/^\\d{1,2}\\s*[\\/\\-]\\s*\\d{1,2}$/.test(a.t)));
+   const hasSubject=!!detectPageSubject(lines);
    const report={page:pn,grade:grade,subject:null,items:[],studentCount:0,error:''};
    pageReports.push(report);
-   if(!grade){report.error='이 페이지의 제목에서 학년을 확실히 읽지 못했습니다. 다른 페이지의 학년이나 항목을 대신 사용하지 않았습니다.';continue;}
+   if(!grade||!hasExactRoster||!hasSubject){
+    try{
+     status.textContent='PDF '+pn+'/'+doc.numPages+'페이지: 이미지 OCR로 제목·표·점수를 읽고 있습니다…';
+     lines=await ocrPageLines(page,pn,status);
+     pageText=lines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
+     grade=detectPageGrade(pageText);
+     report.grade=grade;
+    }catch(ocrError){
+     report.error='텍스트를 추출할 수 없고 OCR도 실행하지 못했습니다: '+ocrError.message;
+     continue;
+    }
+   }
+   if(!grade){report.error='OCR을 시도했지만 이 페이지의 제목에서 학년을 읽지 못했습니다. 문서의 학년 표기를 확인하세요.';continue;}
 
-   const rosterLines=lines.filter(l=>l.items.some(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t)));
-   if(!rosterLines.length){report.error='이 페이지에서 학생 번호가 있는 행을 찾지 못했습니다.';continue;}
-   const topStudentY=Math.max(...rosterLines.map(l=>l.y));
+   const rosterLines=lines.filter(isStudentScoreRow);   const topStudentY=Math.max(...rosterLines.map(l=>l.y));
    const headerLines=lines.filter(l=>l.y>topStudentY+2);
    const headerText=headerLines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
    const compactHeader=normAssessmentText(headerText);
@@ -199,7 +296,7 @@ $('readPdf').onclick=async()=>{
    }
    itemsWithX.sort((a,b)=>a.headerX-b.headerX);
 
-   const rows=rosterLines.map(parseRosterLine).filter(Boolean);
+   const rows=rosterLines.map((line,i)=>parseRosterLine(line,i+1)).filter(Boolean);
    if(!rows.length){report.error='이 페이지에서 학생 이름과 점수를 읽지 못했습니다.';continue;}
    const positions=clusterScorePositions(rows);
    if(positions.length<itemsWithX.length){report.error='개별 수행평가 점수 열의 위치를 모두 확인하지 못했습니다. 추측으로 항목을 배정하지 않았습니다.';continue;}
