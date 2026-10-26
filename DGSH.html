@@ -46,20 +46,36 @@ async function ensureOcrWorker(status){
 }
 async function ocrPageLines(page,pn,status){
  const worker=await ensureOcrWorker(status);
- const viewport=page.getViewport({scale:2.6});
+ // 전체 페이지 OCR은 학생 행과 점수 열의 좌표를 보존한다.
+ const viewport=page.getViewport({scale:3});
  const canvas=document.createElement('canvas');
  canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
  await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
- status.textContent='스캔 PDF OCR 처리 중: '+pn+'페이지';
+ status.textContent='스캔 PDF OCR 처리 중: '+pn+'페이지 표 인식';
  const out=await worker.recognize(canvas);
+ let rawText=String(out.data.text||'');
  const words=(out.data.words||[]).filter(w=>String(w.text||'').trim()&&(!Number.isFinite(w.confidence)||w.confidence>=8));
  const items=words.map(w=>{
   const b=w.bbox||{};
   return {t:String(w.text||'').trim(),x:Number(b.x0)||0,y:canvas.height-(((Number(b.y0)||0)+(Number(b.y1)||0))/2),w:Math.max(1,(Number(b.x1)||0)-(Number(b.x0)||0)),h:Math.max(1,(Number(b.y1)||0)-(Number(b.y0)||0)),ocr:true,confidence:w.confidence};
  });
+ // 제목과 항목 머리글은 전체 페이지에서 작으므로 상단 48%를 2배 확대해 재인식한다.
+ try{
+  const crop=document.createElement('canvas');
+  const cropH=Math.floor(canvas.height*.48);
+  crop.width=canvas.width*2;crop.height=cropH*2;
+  const cctx=crop.getContext('2d');
+  cctx.imageSmoothingEnabled=true;cctx.imageSmoothingQuality='high';
+  cctx.drawImage(canvas,0,0,canvas.width,cropH,0,0,crop.width,crop.height);
+  status.textContent='스캔 PDF OCR 처리 중: '+pn+'페이지 제목 확대 판독';
+  const headOut=await worker.recognize(crop);
+  rawText+='\n'+String(headOut.data.text||'');
+  crop.width=1;crop.height=1;
+ }catch(e){}
  canvas.width=1;canvas.height=1;
- if(!items.length)throw new Error('OCR에서 글자를 찾지 못했습니다.');
+ if(!items.length&&!rawText.trim())throw new Error('OCR에서 글자를 찾지 못했습니다.');
  const lines=lineGroups(items);lines.forEach(l=>l.page=pn);
+ lines.ocrRawText=rawText;
  return lines;
 }
 function isStudentScoreRow(line){
@@ -69,10 +85,9 @@ function isStudentScoreRow(line){
  if(/응시생수|총점|평균|학년|합계|비고|성명|반\s*[\/]\s*번호|교과목|강의실|일람표|만점|학년도/.test(raw))return false;
  const nums=its.filter(a=>/^\d{1,3}[.,]\d{1,2}$/.test(a.t.trim()));
  if(nums.length<2)return false;
- const before=its.filter(a=>a.x<nums[0].x);
- return before.length>=1;
+ return its.some(a=>a.x<nums[0].x);
 }
-let pdfCandidates=[];
+let pdfCandidates=[];let pdfCandidates=[];
 const pdfjsReady=()=>{if(!window.pdfjsLib)throw new Error('PDF 읽기 모듈을 불러오지 못했습니다. 인터넷 연결 후 다시 열어 주세요.');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';};
 function lineGroups(items){
  let arr=items.map(it=>({t:(it.str||it.t||'').trim(),x:it.transform?.[4]??it.x??0,y:it.transform?.[5]??it.y??0,w:it.width??it.w??0,h:Math.abs(it.height??it.h??it.transform?.[3]??0)})).filter(a=>a.t);
@@ -89,26 +104,30 @@ function lineGroups(items){
 function normAssessmentText(x){return (x||'').replace(/[\s·ㆍ\-_:：()（）]/g,'').toLowerCase();}
 function detectPageGrade(text){
  const t=normAssessmentText(text);
- const h=t.match(/([1-3])학년수행평가항목/);
- if(h)return h[1]+'학년';
- const groups=[
-  ...[...t.matchAll(/([1-3])학년\d+반/g)],
-  ...[...t.matchAll(/([1-3])학년[0-9ㅣlI|]*강의실/g)]
- ].map(m=>m[1]+'학년');
- const unique=[...new Set(groups)];
+ // OCR 문구 전체에서 1~3학년 표기를 먼저 찾는다.
+ const markers=[...t.matchAll(/([1-3])학년/g)].map(m=>m[1]+'학년');
+ const ocrMarkers=[...t.matchAll(/([1-3])학(?:넌|연|생)/g)].map(m=>m[1]+'학년');
+ const classroom=[...t.matchAll(/([1-3])학년[0-9ㅣlI|]*강의실/g)].map(m=>m[1]+'학년');
+ const unique=[...new Set([...markers,...ocrMarkers,...classroom])];
  return unique.length===1?unique[0]:null;
 }
 function detectPageSubject(lines){
  const known=[...new Set(DATA.map(x=>x.subject))].sort((a,b)=>b.length-a.length);
- for(const line of lines){
-  const raw=line.items.map(a=>a.t).join(' ');
+ const texts=lines.map(line=>line.items.map(a=>a.t).join(' '));
+ if(lines.ocrRawText)texts.push(...lines.ocrRawText.split(/\n+/));
+ for(const raw of texts){
   const compact=normAssessmentText(raw);
   const i=compact.indexOf('교과목');
-  if(i<0)continue;
-  const rest=compact.slice(i+'교과목'.length);
-  for(const subject of known){if(rest.startsWith(normAssessmentText(subject)))return subject;}
+  if(i>=0){
+   const rest=compact.slice(i+'교과목'.length);
+   for(const sub of known)if(rest.startsWith(normAssessmentText(sub)))return sub;
+  }
+  const afterColon=compact.split(/[：:]/).slice(1).join('');
+  for(const sub of known)if(afterColon.startsWith(normAssessmentText(sub)))return sub;
  }
- return null;
+ const all=normAssessmentText(texts.join(' '));
+ const found=known.filter(sub=>all.includes(normAssessmentText(sub)));
+ return found.length===1?found[0]:null;
 }
 function editDistance(a,b){
  const prev=Array.from({length:b.length+1},(_,i)=>i);
@@ -254,17 +273,19 @@ $('readPdf').onclick=async()=>{
    lines.forEach(l=>l.page=pn);
    let pageText=lines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
    let grade=detectPageGrade(pageText);
-   const hasExactRoster=lines.some(l=>l.items.some(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t)));
-   const hasSubject=!!detectPageSubject(lines);
+   let hasExactRoster=lines.some(l=>l.items.some(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t)));
+   let hasSubject=!!detectPageSubject(lines);
    const report={page:pn,grade:grade,subject:null,items:[],studentCount:0,error:''};
    pageReports.push(report);
    if(!grade||!hasExactRoster||!hasSubject){
     try{
      status.textContent='PDF '+pn+'/'+doc.numPages+'페이지: 이미지 OCR로 제목·표·점수를 읽고 있습니다…';
      lines=await ocrPageLines(page,pn,status);
-     pageText=lines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ');
+     pageText=lines.map(l=>l.items.map(a=>a.t).join(' ')).join(' ')+' '+(lines.ocrRawText||'');
      grade=detectPageGrade(pageText);
      report.grade=grade;
+     hasExactRoster=lines.some(l=>l.items.some(a=>/^\d{1,2}\s*[\/\-]\s*\d{1,2}$/.test(a.t)));
+     hasSubject=!!detectPageSubject(lines);
     }catch(ocrError){
      report.error='텍스트를 추출할 수 없고 OCR도 실행하지 못했습니다: '+ocrError.message;
      continue;
